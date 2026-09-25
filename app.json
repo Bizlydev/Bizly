@@ -5,9 +5,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "backgroundColor": "#0B1120"
+    },
     "android": {
       "package": "com.bizlydev.bizly",
-      "versionCode": 1
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0B1120"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.bizlydev.bizly",
