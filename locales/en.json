@@ -1,1 +1,13 @@
-// این فایل متن‌های رابط کاربری به زبان انگلیسی را نگه می‌دارد.
+{
+  "login": "Login",
+  "register": "Register",
+  "email": "Email",
+  "password": "Password",
+  "dashboard": "Dashboard",
+  "sales": "Sales",
+  "debts": "Debts",
+  "employees": "Employees",
+  "tasks": "Tasks",
+  "settings": "Settings",
+  "signOut": "Sign Out"
+}
