@@ -4,22 +4,15 @@
     "slug": "bizly",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "bizly",
     "userInterfaceStyle": "automatic",
-    "plugins": [
-      "expo-router"
-    ],
     "android": {
       "package": "com.bizlydev.bizly",
       "versionCode": 1
     },
     "ios": {
-      "bundleIdentifier": "com.bizlydev.bizly"
+      "bundleIdentifier": "com.bizlydev.bizly",
+      "buildNumber": "1.0.0"
     },
-    "extra": {
-      "eas": {
-        "projectId": ""
-      }
-    }
+    "plugins": ["expo-router"]
   }
 }
