@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -12,149 +11,111 @@ export default function MyHoursScreen() {
   const { profile } = useAuth();
   const { workspace } = useWorkspace();
   const [records, setRecords] = useState<any[]>([]);
-  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [activeRecord, setActiveRecord] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const storageKey = profile ? `work-hours-start-${profile.id}` : null;
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!profile || !storageKey) return;
-    let active = true;
+    if (!profile) return;
+    loadRecords();
+  }, [profile]);
 
-    async function initialize() {
-      setLoading(true);
-      const [storedStart, result] = await Promise.all([
-        AsyncStorage.getItem(storageKey!),
-        supabase
-          .from('work_hours')
-          .select('*')
-          .eq('employee_id', profile!.id)
-          .order('date', { ascending: false }),
-      ]);
-
-      if (!active) return;
-      if (storedStart) {
-        const parsed = new Date(storedStart);
-        if (!Number.isNaN(parsed.getTime())) setStartTime(parsed);
-        else await AsyncStorage.removeItem(storageKey!);
-      }
-      if (result.error) {
-        Alert.alert('خطا', 'دریافت سوابق ساعت کاری ناموفق بود.');
-      } else {
-        setRecords(result.data || []);
-      }
-      setLoading(false);
+  async function loadRecords() {
+    if (!profile) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('work_hours')
+      .select('*')
+      .eq('employee_id', profile.id)
+      .order('date', { ascending: false });
+    if (error) {
+      Alert.alert('خطا', 'دریافت سوابق ساعت کاری ناموفق بود.');
+    } else {
+      const all = data || [];
+      setRecords(all);
+      setActiveRecord(all.find((item) => !item.end_time) || null);
     }
-
-    initialize().catch(() => {
-      if (active) {
-        setLoading(false);
-        Alert.alert('خطا', 'بازیابی ساعت شروع کار ناموفق بود.');
-      }
-    });
-
-    return () => { active = false; };
-  }, [profile, storageKey]);
+    setLoading(false);
+  }
 
   async function clockIn() {
-    if (!storageKey) return;
+    if (!profile || !workspace || saving) return;
+    setSaving(true);
     const now = new Date();
-    try {
-      await AsyncStorage.setItem(storageKey, now.toISOString());
-      setStartTime(now);
-    } catch {
-      Alert.alert('خطا', 'ذخیره ساعت شروع کار ناموفق بود. دوباره تلاش کنید.');
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const { data, error } = await supabase.from('work_hours').insert({
+      workspace_id: workspace.id,
+      employee_id: profile.id,
+      date,
+      start_time: now.toTimeString().slice(0, 5),
+      end_time: null,
+      total_hours: null,
+    }).select().single();
+    setSaving(false);
+    if (error) {
+      Alert.alert('خطا', 'ثبت ساعت شروع کار در سرور انجام نشد.');
+      return;
     }
+    setActiveRecord(data);
+    setRecords((previous) => [data, ...previous]);
   }
 
   async function clockOut() {
-    if (!startTime || !profile || !workspace || !storageKey) return;
+    if (!activeRecord || saving) return;
+    setSaving(true);
     const end = new Date();
-    const totalHours = (end.getTime() - startTime.getTime()) / 1000 / 60 / 60;
-    const localDate = `${startTime.getFullYear()}-${String(startTime.getMonth() + 1).padStart(2, '0')}-${String(startTime.getDate()).padStart(2, '0')}`;
-
-    const { error } = await supabase.from('work_hours').insert({
-      workspace_id: workspace.id,
-      employee_id: profile.id,
-      date: localDate,
-      start_time: startTime.toTimeString().slice(0, 5),
+    const [hours, minutes] = String(activeRecord.start_time).slice(0, 5).split(':').map(Number);
+    const start = new Date(activeRecord.date + 'T00:00:00');
+    start.setHours(hours, minutes, 0, 0);
+    const totalHours = Math.max(0, (end.getTime() - start.getTime()) / 3600000);
+    const { data, error } = await supabase.from('work_hours').update({
       end_time: end.toTimeString().slice(0, 5),
       total_hours: Math.round(totalHours * 100) / 100,
-    });
-
+    }).eq('id', activeRecord.id).select().single();
+    setSaving(false);
     if (error) {
-      Alert.alert('خطا', 'ثبت ساعت پایان کار انجام نشد. زمان شروع حفظ شده است؛ دوباره تلاش کنید.');
+      Alert.alert('خطا', 'ثبت ساعت پایان کار انجام نشد. زمان شروع در سرور باقی مانده است.');
       return;
     }
-
-    try {
-      await AsyncStorage.removeItem(storageKey);
-      setStartTime(null);
-      const { data, error: loadError } = await supabase
-        .from('work_hours')
-        .select('*')
-        .eq('employee_id', profile.id)
-        .order('date', { ascending: false });
-      if (!loadError) setRecords(data || []);
-    } catch {
-      Alert.alert('توجه', 'ساعت کاری ثبت شد، اما پاک‌سازی زمان شروع از حافظه گوشی انجام نشد.');
-    }
+    setActiveRecord(null);
+    setRecords((previous) => previous.map((item) => item.id === data.id ? data : item));
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg }}>
-      <Text style={{ ...typography.title, color: colors.text, marginBottom: spacing.lg }}>
-        ساعت کاری
-      </Text>
-
+      <Text style={{ ...typography.title, color: colors.text, marginBottom: spacing.lg }}>ساعت کاری</Text>
       <TouchableOpacity
-        onPress={startTime ? clockOut : clockIn}
-        disabled={loading}
+        onPress={activeRecord ? clockOut : clockIn}
+        disabled={loading || saving}
         style={{
-          backgroundColor: startTime ? colors.danger : colors.primary,
+          backgroundColor: activeRecord ? colors.danger : colors.primary,
           borderRadius: radius.md,
           padding: spacing.lg,
           alignItems: 'center',
           marginBottom: spacing.lg,
-          opacity: loading ? 0.6 : 1,
+          opacity: loading || saving ? 0.6 : 1,
         }}
       >
         <Text style={{ color: '#FFF', ...typography.title }}>
-          {loading ? 'در حال بارگذاری...' : startTime ? 'پایان کار' : 'شروع کار'}
+          {loading ? 'در حال بارگذاری...' : saving ? 'در حال ذخیره...' : activeRecord ? 'پایان کار' : 'شروع کار'}
         </Text>
       </TouchableOpacity>
-
-      {startTime && (
+      {activeRecord && (
         <Text style={{ color: colors.textSecondary, marginBottom: spacing.md, textAlign: 'center' }}>
-          شروع کار: {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          شروع کار: {String(activeRecord.start_time).slice(0, 5)}
         </Text>
       )}
-
       <FlatList
         data={records}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              backgroundColor: colors.surface,
-              borderRadius: radius.md,
-              padding: spacing.md,
-              marginBottom: spacing.sm,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border }}>
             <Text style={{ color: colors.text }}>{item.date}</Text>
-            <Text style={{ color: colors.textSecondary }}>{item.start_time} - {item.end_time}</Text>
-            <Text style={{ color: colors.primaryLight, ...typography.subtitle }}>{item.total_hours} ساعت</Text>
+            <Text style={{ color: colors.textSecondary }}>{String(item.start_time).slice(0, 5)} - {item.end_time ? String(item.end_time).slice(0, 5) : 'در حال کار'}</Text>
+            <Text style={{ color: colors.primaryLight, ...typography.subtitle }}>{item.total_hours == null ? '—' : `${item.total_hours} ساعت`}</Text>
           </View>
         )}
-        ListEmptyComponent={
-          <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
-            {loading ? 'در حال دریافت سوابق...' : 'هنوز ساعتی ثبت نشده'}
-          </Text>
-        }
+        ListEmptyComponent={<Text style={{ color: colors.textSecondary, textAlign: 'center' }}>{loading ? 'در حال دریافت سوابق...' : 'هنوز ساعتی ثبت نشده'}</Text>}
       />
     </View>
   );
