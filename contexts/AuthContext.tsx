@@ -6,6 +6,8 @@ interface AuthContextType {
   session: any;
   profile: Profile | null;
   loading: boolean;
+  isPending: boolean;
+  isRejected: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -13,6 +15,8 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   loading: true,
+  isPending: false,
+  isRejected: false,
   signOut: async () => {},
 });
 
@@ -62,8 +66,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }
 
+  const isPending = profile?.status === 'pending' && profile?.role === 'employee';
+  const isRejected = profile?.status === 'rejected';
+
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, isPending, isRejected, signOut }}>
       {children}
     </AuthContext.Provider>
   );
