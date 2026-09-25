@@ -1,1 +1,25 @@
-// این فایل تنظیمات برنامه را تعریف می‌کند.
+{
+  "expo": {
+    "name": "Bizly",
+    "slug": "bizly",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "bizly",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router"
+    ],
+    "android": {
+      "package": "com.bizlydev.bizly",
+      "versionCode": 1
+    },
+    "ios": {
+      "bundleIdentifier": "com.bizlydev.bizly"
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
