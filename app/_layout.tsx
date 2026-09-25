@@ -5,7 +5,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { ActivityIndicator, View } from 'react-native';
 
 function RootNavigation() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, isPending } = useAuth();
   const { colors } = useTheme();
 
   if (loading) {
@@ -18,6 +18,10 @@ function RootNavigation() {
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
+  }
+
+  if (isPending) {
+    return <Redirect href="/(auth)/pending-approval" />;
   }
 
   if (profile?.role === 'manager') {
