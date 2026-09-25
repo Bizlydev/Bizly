@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Animated, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../contexts/ThemeContext';
 import { typography, spacing, radius } from '../../constants/theme';
@@ -9,6 +9,7 @@ type Mode = 'employee' | 'manager';
 
 export default function RegisterScreen() {
   const { colors } = useTheme();
+  const params = useLocalSearchParams<{ selectedWorkspaceId?: string; selectedWorkspaceName?: string }>();
   const [mode, setMode] = useState<Mode>('employee');
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -20,8 +21,17 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [selectedWorkspaceName, setSelectedWorkspaceName] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (params.selectedWorkspaceId) {
+      setSelectedWorkspaceId(params.selectedWorkspaceId);
+      setSelectedWorkspaceName(params.selectedWorkspaceName || null);
+    }
+  }, [params.selectedWorkspaceId]);
 
   function switchMode(newMode: Mode) {
     setMode(newMode);
@@ -36,6 +46,10 @@ export default function RegisterScreen() {
     setError('');
     if (password !== confirmPassword) {
       setError('رمز عبور و تکرار آن یکسان نیستند');
+      return;
+    }
+    if (mode === 'employee' && !selectedWorkspaceId) {
+      setError('لطفاً ابتدا کسب‌وکار خود را انتخاب کنید');
       return;
     }
     setLoading(true);
@@ -79,7 +93,7 @@ export default function RegisterScreen() {
     } else {
       await supabase.from('profiles').insert({
         id: userId,
-        workspace_id: null,
+        workspace_id: selectedWorkspaceId,
         role: 'employee',
         status: 'pending',
         first_name: firstName,
@@ -117,28 +131,15 @@ export default function RegisterScreen() {
             backgroundColor: colors.primary,
             borderRadius: radius.full,
             transform: [{
-              translateX: slideAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 1],
-              }).interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) as any,
+              translateX: slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) as any,
             }],
           }}
         />
-        <TouchableOpacity
-          onPress={() => switchMode('employee')}
-          style={{ flex: 1, padding: spacing.sm, alignItems: 'center', zIndex: 1 }}
-        >
-          <Text style={{ color: mode === 'employee' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>
-            ثبت‌نام کارمند
-          </Text>
+        <TouchableOpacity onPress={() => switchMode('employee')} style={{ flex: 1, padding: spacing.sm, alignItems: 'center', zIndex: 1 }}>
+          <Text style={{ color: mode === 'employee' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>ثبت‌نام کارمند</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => switchMode('manager')}
-          style={{ flex: 1, padding: spacing.sm, alignItems: 'center', zIndex: 1 }}
-        >
-          <Text style={{ color: mode === 'manager' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>
-            ثبت‌نام مدیر
-          </Text>
+        <TouchableOpacity onPress={() => switchMode('manager')} style={{ flex: 1, padding: spacing.sm, alignItems: 'center', zIndex: 1 }}>
+          <Text style={{ color: mode === 'manager' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>ثبت‌نام مدیر</Text>
         </TouchableOpacity>
       </View>
 
@@ -210,10 +211,12 @@ export default function RegisterScreen() {
             padding: spacing.md,
             marginBottom: spacing.md,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: selectedWorkspaceId ? colors.primary : colors.border,
           }}
         >
-          <Text style={{ color: colors.textSecondary }}>انتخاب کسب‌وکار (به‌زودی)</Text>
+          <Text style={{ color: selectedWorkspaceId ? colors.text : colors.textSecondary }}>
+            {selectedWorkspaceName || 'انتخاب کسب‌وکار'}
+          </Text>
         </TouchableOpacity>
       )}
 
