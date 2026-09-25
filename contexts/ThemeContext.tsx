@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
-import { setAppIcon } from 'expo-dynamic-app-icon';
+import { setAppIcon } from '@mozzius/expo-dynamic-app-icon';
 import { darkColors, lightColors, ThemeColors } from '../constants/theme';
 
 type ThemeMode = 'dark' | 'light';
