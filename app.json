@@ -3,6 +3,7 @@
     "name": "Bizly",
     "slug": "bizly",
     "version": "1.0.0",
+    "owner": "bizlydev",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
