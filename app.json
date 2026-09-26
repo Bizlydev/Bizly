@@ -27,8 +27,8 @@
       [
         "@mozzius/expo-dynamic-app-icon",
         {
-          "light": {
-            "android": "./assets/icon-light.png"
+          "default": {
+            "image": "./assets/icon.png"
           }
         }
       ]
