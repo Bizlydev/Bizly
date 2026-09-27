@@ -23,7 +23,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function loadWorkspace() {
-    if (!profile?.workspaceId) {
+    const workspaceId = (profile as any)?.workspace_id;
+    if (!workspaceId) {
       setWorkspace(null);
       setLoading(false);
       return;
@@ -31,7 +32,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     const { data } = await supabase
       .from('workspaces')
       .select('*')
-      .eq('id', profile.workspaceId)
+      .eq('id', workspaceId)
       .single();
     setWorkspace(data);
     setLoading(false);
@@ -39,7 +40,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadWorkspace();
-  }, [profile?.workspaceId]);
+  }, [(profile as any)?.workspace_id]);
 
   const isManager = profile?.role === 'manager';
 
