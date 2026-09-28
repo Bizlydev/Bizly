@@ -4,21 +4,39 @@ import { router } from 'expo-router';
 import { AppButton } from '../../components/common/AppButton';
 import { AppInput } from '../../components/common/AppInput';
 import { useWorkspace } from '../../hooks/useWorkspace';
+import { useAuth } from '../../hooks/useAuth';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+
+type CreatedWorkspace = { workspace_id: string; workspace_name: string; member_role: 'manager' | 'employee' };
 
 export default function SelectWorkspaceScreen() {
   const { setWorkspace } = useWorkspace();
+  const { user } = useAuth();
   const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  function continueToApp() {
+  async function continueToApp() {
     const cleanName = name.trim();
-    if (!cleanName) return Alert.alert('Workspace name required', 'Enter the name of your workspace.');
-    setWorkspace({ id: 'local-pending', name: cleanName, role: 'owner' });
-    router.replace('/(app)/dashboard');
+    if (cleanName.length < 2) return Alert.alert('Workspace name required', 'Enter a name with at least 2 characters.');
+    if (!isSupabaseConfigured || !user) return Alert.alert('Sign in required', 'Sign in to create a workspace.');
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc('create_workspace', { p_name: cleanName });
+      if (error) throw error;
+      const created = (Array.isArray(data) ? data[0] : data) as CreatedWorkspace | null;
+      if (!created?.workspace_id) throw new Error('Workspace was not returned by the server.');
+      setWorkspace({ id: created.workspace_id, name: created.workspace_name, role: created.member_role });
+      router.replace('/(app)/dashboard');
+    } catch (error) {
+      Alert.alert('Unable to create workspace', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return <View style={styles.page}><Text style={styles.title}>Set up your workspace</Text><Text style={styles.subtitle}>Give your business workspace a name to continue.</Text>
+  return <View style={styles.page}><Text style={styles.title}>Set up your workspace</Text><Text style={styles.subtitle}>Create a real business workspace linked to your account.</Text>
     <AppInput label="Workspace name" value={name} onChangeText={setName} placeholder="My business" autoCapitalize="words" />
-    <AppButton onPress={continueToApp}>Continue</AppButton>
+    <AppButton loading={busy} onPress={continueToApp}>Create workspace</AppButton>
   </View>;
 }
 
