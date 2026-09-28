@@ -12,9 +12,8 @@ const palette = {
 };
 
 type SaleRow = { id: string; amount: number | string; date: string; product: string | null; employee_id: string | null };
-type DashboardData = { sales: SaleRow[]; customersCount: number; pendingTasks: number; role: string; error: string | null };
-const emptyData: DashboardData = { sales: [], customersCount: 0, pendingTasks: 0, role: 'employee', error: null };
-const chart = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+type DashboardData = { sales: SaleRow[]; customersCount: number; tasksCount: number; pendingTasks: number; role: string; error: string | null };
+const emptyData: DashboardData = { sales: [], customersCount: 0, tasksCount: 0, pendingTasks: 0, role: 'employee', error: null };
 const activityColors = ['#19B88A', '#4169F5', '#8B63EF'];
 
 export default function DashboardScreen() {
@@ -39,15 +38,16 @@ export default function DashboardScreen() {
       }
       const profile = profileResult.data;
       const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
-      const [workspaceResult, salesResult, customersResult, tasksResult] = await Promise.all([
+      const [workspaceResult, salesResult, customersResult, tasksResult, pendingTasksResult] = await Promise.all([
         supabase.from('workspaces').select('id, name').eq('id', profile.workspace_id).maybeSingle(),
         supabase.from('sales').select('id, amount, date, product, employee_id').gte('date', start.toISOString().slice(0, 10)).order('date', { ascending: false }),
         supabase.from('customers').select('id', { count: 'exact', head: true }),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }),
         supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       ]);
       if (!active) return;
-      const errors = [salesResult.error, customersResult.error, tasksResult.error].filter(Boolean);
-      setData({ sales: salesResult.data || [], customersCount: customersResult.count || 0, pendingTasks: tasksResult.count || 0, role: profile.role || 'employee', error: errors.length ? 'برخی اطلاعات به دلیل محدودیت دسترسی یا خطای اتصال بارگذاری نشدند.' : null });
+      const errors = [salesResult.error, customersResult.error, tasksResult.error, pendingTasksResult.error].filter(Boolean);
+      setData({ sales: salesResult.data || [], customersCount: customersResult.count || 0, tasksCount: tasksResult.count || 0, pendingTasks: pendingTasksResult.count || 0, role: profile.role || 'employee', error: errors.length ? 'برخی اطلاعات به دلیل محدودیت دسترسی یا خطای اتصال بارگذاری نشدند.' : null });
       if (workspaceResult.data) setWorkspace({ id: workspaceResult.data.id, name: workspaceResult.data.name, role: profile.role || 'employee' });
       setLoading(false);
     }
@@ -73,7 +73,7 @@ export default function DashboardScreen() {
   const stats = [
     ...(isManager ? [{ label: 'مجموع فروش', value: totalSales.toLocaleString('fa-IR'), unit: 'تومان', note: loading ? 'در حال بارگذاری…' : 'فروش ثبت‌شده این ماه', icon: '↗', color: '#4169F5', tint: '#7894FF' }] : []),
     { label: isManager ? 'فروش‌ها' : 'فروش‌های من', value: data.sales.length.toLocaleString('fa-IR'), unit: 'ثبت‌شده', note: loading ? 'در حال بارگذاری…' : 'از ابتدای ماه', icon: '▤', color: '#8B63EF', tint: '#B08CFF' },
-    { label: isManager ? 'مشتریان' : 'کارهای من', value: (isManager ? data.customersCount : 0).toLocaleString('fa-IR'), unit: isManager ? 'مشتری' : 'کار', note: loading ? 'در حال بارگذاری…' : (isManager ? 'مشتریان فضای کاری' : 'اطلاعات کار شخصی'), icon: '♙', color: '#19B88A', tint: '#50DDB0' },
+    { label: isManager ? 'مشتریان' : 'وظایف من', value: (isManager ? data.customersCount : data.tasksCount).toLocaleString('fa-IR'), unit: isManager ? 'مشتری' : 'وظیفه', note: loading ? 'در حال بارگذاری…' : (isManager ? 'مشتریان فضای کاری' : 'وظایف اختصاص‌یافته'), icon: '♙', color: '#19B88A', tint: '#50DDB0' },
     { label: 'در انتظار', value: data.pendingTasks.toLocaleString('fa-IR'), unit: 'وظیفه', note: loading ? 'در حال بارگذاری…' : 'وظایف باز', icon: '◷', color: '#F4AD4F', tint: '#FFD17B' },
   ];
 
@@ -161,8 +161,8 @@ export default function DashboardScreen() {
           <View style={[styles.panel, styles.bottomPanel]}>
             <View style={styles.panelHeader}><View><Text style={styles.panelTitle}>هدف ماهانه</Text><Text style={styles.muted}>پیشرفت تا هدف تعیین‌شده</Text></View></View>
             <View style={styles.goalRow}>
-              <View style={styles.goalRing}><View style={styles.goalInner}><Text style={styles.goalPercent}>۷۲٪</Text><Text style={styles.goalCaption}>تکمیل‌شده</Text></View></View>
-              <View style={{ flex: 1 }}><Text style={styles.goalTitle}>در مسیر هدف هستید!</Text><Text style={styles.muted}>برای رسیدن به هدف ماهانه، روند فعلی را ادامه دهید.</Text></View>
+              <View style={styles.goalRing}><View style={styles.goalInner}><Text style={styles.goalPercent}>—</Text><Text style={styles.goalCaption}>تکمیل‌شده</Text></View></View>
+              <View style={{ flex: 1 }}><Text style={styles.goalTitle}>هنوز هدفی تعیین نشده است</Text><Text style={styles.muted}>با ثبت هدف ماهانه، پیشرفت شما در این بخش نمایش داده می‌شود.</Text></View>
             </View>
           </View>
           <View style={[styles.panel, styles.bottomPanel]}>
