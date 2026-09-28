@@ -1,35 +1,80 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../hooks/useTheme';
 import { useWorkspace } from '../../hooks/useWorkspace';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
 const palette = {
   light: { bg: '#F2F5FB', card: '#FFFFFF', panel: '#F8FAFF', text: '#17213B', muted: '#8490A8', line: '#E8EDF6', blue: '#4169F5', purple: '#8B63EF', green: '#19B88A', orange: '#F4AD4F' },
   dark: { bg: '#080D1A', card: '#111A2D', panel: '#17223A', text: '#EEF3FF', muted: '#94A3BF', line: '#25324B', blue: '#7393FF', purple: '#A18AFF', green: '#37D5A6', orange: '#FFBD67' },
 };
 
-const chart = [32, 45, 39, 58, 49, 72, 62, 86, 68, 95, 80, 100];
-const activities = [
-  { icon: '＋', title: 'سفارش جدید ثبت شد', detail: 'مشتری: فروشگاه آریا · ۱۰ دقیقه پیش', amount: '+ ۲,۴۵۰,۰۰۰', color: '#19B88A' },
-  { icon: '✓', title: 'سفارش با موفقیت تکمیل شد', detail: 'مشتری: مجموعه پارس · ۴۵ دقیقه پیش', amount: 'تکمیل شد', color: '#4169F5' },
-  { icon: '♙', title: 'مشتری جدید اضافه شد', detail: 'شرکت نوآوران · ۱ ساعت پیش', amount: 'مشتری جدید', color: '#8B63EF' },
-];
+type SaleRow = { id: string; amount: number | string; date: string; product: string | null; employee_id: string | null };
+type DashboardData = { sales: SaleRow[]; customersCount: number; pendingTasks: number; role: string; error: string | null };
+const emptyData: DashboardData = { sales: [], customersCount: 0, pendingTasks: 0, role: 'employee', error: null };
+const chart = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const activityColors = ['#19B88A', '#4169F5', '#8B63EF'];
 
 export default function DashboardScreen() {
   const { isDark, setMode } = useTheme();
-  const { workspace } = useWorkspace();
+  const { workspace, setWorkspace } = useWorkspace();
+  const { user } = useAuth();
+  const [data, setData] = useState<DashboardData>(emptyData);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function loadDashboard() {
+      if (!isSupabaseConfigured || !user) {
+        if (active) { setData({ ...emptyData, error: 'برای مشاهده اطلاعات واقعی، اتصال Supabase و ورود به حساب لازم است.' }); setLoading(false); }
+        return;
+      }
+      setLoading(true);
+      const profileResult = await supabase.from('profiles').select('id, workspace_id, role, first_name, last_name').eq('id', user.id).maybeSingle();
+      if (profileResult.error || !profileResult.data?.workspace_id) {
+        if (active) { setData({ ...emptyData, error: profileResult.error?.message || 'برای حساب شما فضای کاری ثبت نشده است.' }); setLoading(false); }
+        return;
+      }
+      const profile = profileResult.data;
+      const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
+      const [workspaceResult, salesResult, customersResult, tasksResult] = await Promise.all([
+        supabase.from('workspaces').select('id, name').eq('id', profile.workspace_id).maybeSingle(),
+        supabase.from('sales').select('id, amount, date, product, employee_id').gte('date', start.toISOString().slice(0, 10)).order('date', { ascending: false }),
+        supabase.from('customers').select('id', { count: 'exact', head: true }),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      ]);
+      if (!active) return;
+      const errors = [salesResult.error, customersResult.error, tasksResult.error].filter(Boolean);
+      setData({ sales: salesResult.data || [], customersCount: customersResult.count || 0, pendingTasks: tasksResult.count || 0, role: profile.role || 'employee', error: errors.length ? 'برخی اطلاعات به دلیل محدودیت دسترسی یا خطای اتصال بارگذاری نشدند.' : null });
+      if (workspaceResult.data) setWorkspace({ id: workspaceResult.data.id, name: workspaceResult.data.name, role: profile.role || 'employee' });
+      setLoading(false);
+    }
+    void loadDashboard();
+    return () => { active = false; };
+  }, [user?.id, setWorkspace]);
+
+  const managerView = data.role === 'manager' || data.role === 'owner' || data.role === 'admin';
+  const totalSales = data.sales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const salesChart = Array.from({ length: 12 }, (_, index) => {
+    const day = index + 1;
+    const value = data.sales.filter((sale) => new Date(`${sale.date}T00:00:00`).getDate() === day).reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
+    return value;
+  });
+  const maxChart = Math.max(1, ...salesChart);
+  const activities = data.sales.slice(0, 3).map((sale, index) => ({ icon: '＋', title: 'فروش ثبت‌شده', detail: `${sale.product || 'فروش'} · ${sale.date}`, amount: `${Number(sale.amount || 0).toLocaleString('fa-IR')} تومان`, color: activityColors[index % activityColors.length] }));
   const { width } = useWindowDimensions();
   const c = isDark ? palette.dark : palette.light;
-  const isManager = workspace?.role === 'owner' || workspace?.role === 'admin' || workspace?.role === 'manager';
+  const isManager = managerView;
   const isNarrow = width < 390;
   const styles = useMemo(() => createStyles(c, isNarrow), [c, isNarrow]);
 
   const stats = [
-    ...(isManager ? [{ label: 'مجموع فروش', value: '۱۲۸,۴۵۰,۰۰۰', unit: 'تومان', note: '↑ ۱۲٪ نسبت به ماه قبل', icon: '↗', color: '#4169F5', tint: '#7894FF' }] : []),
-    { label: isManager ? 'سفارش‌ها' : 'سفارش‌های من', value: isManager ? '۲۴۸' : '۱۸', unit: 'سفارش', note: '↑ ۸٪ نسبت به ماه قبل', icon: '▤', color: '#8B63EF', tint: '#B08CFF' },
-    { label: isManager ? 'مشتریان' : 'کارهای انجام‌شده', value: isManager ? '۱,۲۸۴' : '۳۶', unit: isManager ? 'مشتری' : 'کار', note: '↑ ۶٪ نسبت به ماه قبل', icon: '♙', color: '#19B88A', tint: '#50DDB0' },
-    { label: 'در انتظار', value: '۱۲', unit: 'مورد', note: 'نیازمند پیگیری', icon: '◷', color: '#F4AD4F', tint: '#FFD17B' },
+    ...(isManager ? [{ label: 'مجموع فروش', value: totalSales.toLocaleString('fa-IR'), unit: 'تومان', note: loading ? 'در حال بارگذاری…' : 'فروش ثبت‌شده این ماه', icon: '↗', color: '#4169F5', tint: '#7894FF' }] : []),
+    { label: isManager ? 'فروش‌ها' : 'فروش‌های من', value: data.sales.length.toLocaleString('fa-IR'), unit: 'ثبت‌شده', note: loading ? 'در حال بارگذاری…' : 'از ابتدای ماه', icon: '▤', color: '#8B63EF', tint: '#B08CFF' },
+    { label: isManager ? 'مشتریان' : 'کارهای من', value: (isManager ? data.customersCount : 0).toLocaleString('fa-IR'), unit: isManager ? 'مشتری' : 'کار', note: loading ? 'در حال بارگذاری…' : (isManager ? 'مشتریان فضای کاری' : 'اطلاعات کار شخصی'), icon: '♙', color: '#19B88A', tint: '#50DDB0' },
+    { label: 'در انتظار', value: data.pendingTasks.toLocaleString('fa-IR'), unit: 'وظیفه', note: loading ? 'در حال بارگذاری…' : 'وظایف باز', icon: '◷', color: '#F4AD4F', tint: '#FFD17B' },
   ];
 
   return (
@@ -56,7 +101,7 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.toolbar}>
-          <View><Text style={styles.sectionTitle}>خلاصه عملکرد</Text><Text style={styles.muted}>گزارش نمونه · این داده‌ها هنوز به سرویس متصل نیستند</Text></View>
+          <View><Text style={styles.sectionTitle}>خلاصه عملکرد</Text><Text style={styles.muted}>{loading ? 'در حال دریافت اطلاعات…' : data.error || 'اطلاعات از فضای کاری شما دریافت می‌شود'}</Text></View>
           <View style={styles.period}><Text style={styles.periodText}>این ماه⌄</Text></View>
         </View>
 
@@ -85,11 +130,11 @@ export default function DashboardScreen() {
               <View style={styles.chartGridLine} />
               <View style={styles.chartGridLine} />
               <View style={styles.bars}>
-                {chart.map((value, index) => <View key={index} style={styles.barSlot}><View style={[styles.bar, { height: `${value}%`, backgroundColor: index === chart.length - 1 ? c.purple : c.blue, opacity: index === chart.length - 1 ? 1 : 0.72 }]} /></View>)}
+                {salesChart.map((value, index) => <View key={index} style={styles.barSlot}><View style={[styles.bar, { height: `${Math.max(value > 0 ? 5 : 0, (value / maxChart) * 100)}%`, backgroundColor: index === salesChart.length - 1 ? c.purple : c.blue, opacity: index === salesChart.length - 1 ? 1 : 0.72 }]} /></View>)}
               </View>
             </View>
             <View style={styles.chartLabels}>{['۱', '۵', '۱۰', '۱۵', '۲۰', '۲۵', '۳۰'].map((v) => <Text key={v} style={styles.chartLabel}>{v}</Text>)}</View>
-            <View style={styles.chartFooter}><Text style={styles.muted}>فروش این ماه</Text><Text style={styles.chartTotal}>۱۲۸,۴۵۰,۰۰۰ تومان</Text></View>
+            <View style={styles.chartFooter}><Text style={styles.muted}>فروش این ماه</Text><Text style={styles.chartTotal}>{totalSales.toLocaleString('fa-IR')} تومان</Text></View>
           </View>
         ) : (
           <View style={styles.personalBanner}>
@@ -103,7 +148,7 @@ export default function DashboardScreen() {
             <View><Text style={styles.panelTitle}>فعالیت‌های اخیر</Text><Text style={styles.muted}>آخرین رویدادهای ثبت‌شده</Text></View>
             <Pressable><Text style={styles.link}>مشاهده همه ←</Text></Pressable>
           </View>
-          {activities.map((item, index) => (
+          {activities.length === 0 ? <Text style={styles.muted}>هنوز فروشی برای نمایش ثبت نشده است.</Text> : activities.map((item, index) => (
             <View key={item.title} style={[styles.activity, index !== activities.length - 1 && styles.activityBorder]}>
               <View style={[styles.activityIcon, { backgroundColor: item.color }]}><Text style={styles.activityIconText}>{item.icon}</Text></View>
               <View style={styles.activityInfo}><Text style={styles.activityTitle}>{item.title}</Text><Text style={styles.activityDetail}>{item.detail}</Text></View>
