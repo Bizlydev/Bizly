@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { router } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
 import { useWorkspace } from '../../hooks/useWorkspace';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -33,7 +34,11 @@ export default function DashboardScreen() {
       setLoading(true);
       const profileResult = await supabase.from('profiles').select('id, workspace_id, role, first_name, last_name').eq('id', user.id).maybeSingle();
       if (profileResult.error || !profileResult.data?.workspace_id) {
-        if (active) { setData({ ...emptyData, error: profileResult.error?.message || 'برای حساب شما فضای کاری ثبت نشده است.' }); setLoading(false); }
+        if (active) {
+          setData({ ...emptyData, error: profileResult.error?.message || 'برای حساب شما فضای کاری ثبت نشده است.' });
+          setLoading(false);
+          if (!profileResult.error && !profileResult.data?.workspace_id) router.replace('/(auth)/select-workspace');
+        }
         return;
       }
       const profile = profileResult.data;
@@ -55,11 +60,11 @@ export default function DashboardScreen() {
     return () => { active = false; };
   }, [user?.id, setWorkspace]);
 
-  const managerView = data.role === 'manager' || data.role === 'owner' || data.role === 'admin';
+  const managerView = data.role === 'manager';
   const totalSales = data.sales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const salesChart = Array.from({ length: 12 }, (_, index) => {
-    const day = index + 1;
-    const value = data.sales.filter((sale) => new Date(`${sale.date}T00:00:00`).getDate() === day).reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
+    const monthLength = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const value = data.sales.filter((sale) => Math.min(11, Math.floor(((new Date(`${sale.date}T00:00:00`).getDate() - 1) / monthLength) * 12)) === index).reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
     return value;
   });
   const maxChart = Math.max(1, ...salesChart);
