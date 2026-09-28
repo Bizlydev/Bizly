@@ -1,16 +1,11 @@
-import { Slot } from 'expo-router';
-import { AuthProvider } from '../contexts/AuthContext';
-import { WorkspaceProvider } from '../contexts/WorkspaceContext';
-import { ThemeProvider } from '../contexts/ThemeContext';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <WorkspaceProvider>
-          <Slot />
-        </WorkspaceProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <>
+      <StatusBar style="auto" />
+      <Stack screenOptions={{ headerShown: false }} />
+    </>
   );
 }
