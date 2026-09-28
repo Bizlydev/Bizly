@@ -1,277 +1,160 @@
-import { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Animated, ScrollView } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useRef, useState } from 'react';
+import { Animated, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../contexts/ThemeContext';
-import { typography, spacing, radius } from '../../constants/theme';
+import { Screen, Field, Btn, Card, Muted, ErrorText } from '../../components/ui';
+import { radius, spacing, typography } from '../../constants/theme';
 
 type Mode = 'employee' | 'manager';
 
 export default function RegisterScreen() {
   const { colors } = useTheme();
-  const params = useLocalSearchParams<{ selectedWorkspaceId?: string; selectedWorkspaceName?: string }>();
   const [mode, setMode] = useState<Mode>('employee');
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const [segW, setSegW] = useState(0);
+  const slide = useRef(new Animated.Value(0)).current;
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
-  const [selectedWorkspaceName, setSelectedWorkspaceName] = useState<string | null>(null);
+  const [wsQuery, setWsQuery] = useState('');
+  const [wsResults, setWsResults] = useState<any[]>([]);
+  const [ws, setWs] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (params.selectedWorkspaceId) {
-      setSelectedWorkspaceId(params.selectedWorkspaceId);
-      setSelectedWorkspaceName(params.selectedWorkspaceName || null);
-    }
-  }, [params.selectedWorkspaceId]);
+  const half = Math.max(segW / 2 - 4, 0);
 
-  function switchMode(newMode: Mode) {
-    setMode(newMode);
-    Animated.timing(slideAnim, {
-      toValue: newMode === 'employee' ? 0 : 1,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
+  function switchMode(m: Mode) {
+    setMode(m);
+    setError('');
+    Animated.timing(slide, { toValue: m === 'employee' ? 0 : 1, duration: 220, useNativeDriver: true }).start();
+  }
+
+  async function searchWs(text: string) {
+    setWsQuery(text);
+    setWs(null);
+    if (text.trim().length < 2) {
+      setWsResults([]);
+      return;
+    }
+    const { data } = await supabase.rpc('search_workspaces', { q: text.trim() });
+    setWsResults(data || []);
   }
 
   async function handleRegister() {
     setError('');
-    if (password !== confirmPassword) {
+    setInfo('');
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      setError('نام، نام خانوادگی و ایمیل را وارد کنید');
+      return;
+    }
+    if (password.length < 6) {
+      setError('رمز عبور باید حداقل ۶ کاراکتر باشد');
+      return;
+    }
+    if (password !== confirm) {
       setError('رمز عبور و تکرار آن یکسان نیستند');
       return;
     }
-    if (mode === 'employee' && !selectedWorkspaceId) {
-      setError('لطفاً ابتدا کسب‌وکار خود را انتخاب کنید');
+    if (mode === 'manager' && !businessName.trim()) {
+      setError('نام کسب‌وکار را وارد کنید');
+      return;
+    }
+    if (mode === 'employee' && !ws) {
+      setError('کسب‌وکار خود را جست‌وجو و انتخاب کنید');
       return;
     }
     setLoading(true);
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (signUpError || !signUpData.user) {
-      setLoading(false);
-      setError(signUpError?.message || 'خطا در ثبت‌نام');
+    const meta =
+      mode === 'manager'
+        ? { role: 'manager', first_name: firstName.trim(), last_name: lastName.trim(), phone: phone.trim(), workspace_name: businessName.trim(), address: address.trim() }
+        : { role: 'employee', first_name: firstName.trim(), last_name: lastName.trim(), phone: phone.trim(), workspace_id: ws!.id };
+    const { data, error: err } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: meta } });
+    setLoading(false);
+    if (err) {
+      setError('ثبت‌نام ناموفق: ' + err.message);
       return;
     }
-
-    const userId = signUpData.user.id;
-
-    if (mode === 'manager') {
-      const { data: workspace, error: wsError } = await supabase
-        .from('workspaces')
-        .insert({ name: businessName, address, manager_id: userId })
-        .select()
-        .single();
-
-      if (wsError || !workspace) {
-        setLoading(false);
-        setError('خطا در ساخت کسب‌وکار');
-        return;
-      }
-
-      await supabase.from('profiles').insert({
-        id: userId,
-        workspace_id: workspace.id,
-        role: 'manager',
-        status: 'approved',
-        first_name: firstName,
-        last_name: lastName,
-        phone,
-        email,
-      });
-    } else {
-      await supabase.from('profiles').insert({
-        id: userId,
-        workspace_id: selectedWorkspaceId,
-        role: 'employee',
-        status: 'pending',
-        first_name: firstName,
-        last_name: lastName,
-        phone,
-        email,
-      });
+    if (!data.session) {
+      setInfo('حساب ساخته شد. ایمیل خود را تأیید کنید و سپس وارد شوید.');
+      return;
     }
-
-    setLoading(false);
-    router.replace('/(auth)/login');
+    router.replace('/');
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg }}>
-      <Text style={{ ...typography.title, color: colors.text, marginBottom: spacing.xl, textAlign: 'center' }}>
-        ساخت حساب کاربری
-      </Text>
-
-      <View style={{
-        flexDirection: 'row',
-        backgroundColor: colors.surface,
-        borderRadius: radius.full,
-        padding: 4,
-        marginBottom: spacing.xl,
-        position: 'relative',
-      }}>
-        <Animated.View
-          style={{
-            position: 'absolute',
-            top: 4,
-            bottom: 4,
-            left: 4,
-            width: '50%',
-            backgroundColor: colors.primary,
-            borderRadius: radius.full,
-            transform: [{
-              translateX: slideAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) as any,
-            }],
-          }}
-        />
-        <TouchableOpacity onPress={() => switchMode('employee')} style={{ flex: 1, padding: spacing.sm, alignItems: 'center', zIndex: 1 }}>
-          <Text style={{ color: mode === 'employee' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>ثبت‌نام کارمند</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => switchMode('manager')} style={{ flex: 1, padding: spacing.sm, alignItems: 'center', zIndex: 1 }}>
-          <Text style={{ color: mode === 'manager' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>ثبت‌نام مدیر</Text>
-        </TouchableOpacity>
-      </View>
-
-      {[
-        { placeholder: 'نام', value: firstName, onChange: setFirstName },
-        { placeholder: 'نام خانوادگی', value: lastName, onChange: setLastName },
-        { placeholder: 'ایمیل', value: email, onChange: setEmail },
-        { placeholder: 'شماره تماس', value: phone, onChange: setPhone },
-      ].map((field, i) => (
-        <TextInput
-          key={i}
-          placeholder={field.placeholder}
-          placeholderTextColor={colors.textSecondary}
-          value={field.value}
-          onChangeText={field.onChange}
-          style={{
-            backgroundColor: colors.surface,
-            color: colors.text,
-            borderRadius: radius.md,
-            padding: spacing.md,
-            marginBottom: spacing.md,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        />
-      ))}
-
-      {mode === 'manager' && (
-        <>
-          <TextInput
-            placeholder="نام کسب‌وکار"
-            placeholderTextColor={colors.textSecondary}
-            value={businessName}
-            onChangeText={setBusinessName}
-            style={{
-              backgroundColor: colors.surface,
-              color: colors.text,
-              borderRadius: radius.md,
-              padding: spacing.md,
-              marginBottom: spacing.md,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          />
-          <TextInput
-            placeholder="آدرس محل کسب‌وکار"
-            placeholderTextColor={colors.textSecondary}
-            value={address}
-            onChangeText={setAddress}
-            style={{
-              backgroundColor: colors.surface,
-              color: colors.text,
-              borderRadius: radius.md,
-              padding: spacing.md,
-              marginBottom: spacing.md,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          />
-        </>
-      )}
-
-      {mode === 'employee' && (
-        <TouchableOpacity
-          onPress={() => router.push('/(auth)/select-workspace')}
-          style={{
-            backgroundColor: colors.surface,
-            borderRadius: radius.md,
-            padding: spacing.md,
-            marginBottom: spacing.md,
-            borderWidth: 1,
-            borderColor: selectedWorkspaceId ? colors.primary : colors.border,
-          }}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Screen title="ساخت حساب کاربری">
+        <View
+          onLayout={(e) => setSegW(e.nativeEvent.layout.width)}
+          style={{ flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.full, padding: 4, marginBottom: spacing.lg }}
         >
-          <Text style={{ color: selectedWorkspaceId ? colors.text : colors.textSecondary }}>
-            {selectedWorkspaceName || 'انتخاب کسب‌وکار'}
-          </Text>
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 4,
+              width: half,
+              backgroundColor: colors.primary,
+              borderRadius: radius.full,
+              transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, half] }) }],
+            }}
+          />
+          <TouchableOpacity onPress={() => switchMode('employee')} style={{ flex: 1, padding: spacing.sm, alignItems: 'center' }}>
+            <Text style={{ color: mode === 'employee' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>ثبت‌نام کارمند</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => switchMode('manager')} style={{ flex: 1, padding: spacing.sm, alignItems: 'center' }}>
+            <Text style={{ color: mode === 'manager' ? '#FFF' : colors.textSecondary, ...typography.subtitle }}>ثبت‌نام مدیر</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Field placeholder="نام" value={firstName} onChangeText={setFirstName} />
+        <Field placeholder="نام خانوادگی" value={lastName} onChangeText={setLastName} />
+        <Field placeholder="ایمیل" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+        <Field placeholder="شماره تماس" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+
+        {mode === 'manager' ? (
+          <>
+            <Field placeholder="نام کسب‌وکار" value={businessName} onChangeText={setBusinessName} />
+            <Field placeholder="آدرس کسب‌وکار" value={address} onChangeText={setAddress} />
+          </>
+        ) : (
+          <>
+            <Field placeholder="جست‌وجوی نام کسب‌وکار" value={wsQuery} onChangeText={searchWs} />
+            {wsResults.map((r) => (
+              <Card
+                key={r.id}
+                onPress={() => {
+                  setWs({ id: r.id, name: r.name });
+                  setWsQuery(r.name);
+                  setWsResults([]);
+                }}
+              >
+                <Text style={{ color: colors.text }}>{r.name}</Text>
+                {r.address ? <Muted>{r.address}</Muted> : null}
+              </Card>
+            ))}
+            {ws ? <Muted style={{ marginBottom: spacing.md, color: colors.success }}>کسب‌وکار انتخاب شد: {ws.name}</Muted> : null}
+          </>
+        )}
+
+        <Field placeholder="رمز عبور" value={password} onChangeText={setPassword} secureTextEntry />
+        <Field placeholder="تکرار رمز عبور" value={confirm} onChangeText={setConfirm} secureTextEntry />
+        <ErrorText text={error} />
+        {info ? <Text style={{ color: colors.success, textAlign: 'center', marginBottom: spacing.md }}>{info}</Text> : null}
+        <Btn label={loading ? 'در حال ثبت‌نام...' : 'ثبت‌نام'} onPress={handleRegister} disabled={loading} />
+        <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={{ marginTop: spacing.md, alignItems: 'center' }}>
+          <Text style={{ color: colors.primaryLight }}>حساب دارید؟ وارد شوید</Text>
         </TouchableOpacity>
-      )}
-
-      <TextInput
-        placeholder="رمز عبور"
-        placeholderTextColor={colors.textSecondary}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        style={{
-          backgroundColor: colors.surface,
-          color: colors.text,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          marginBottom: spacing.md,
-          borderWidth: 1,
-          borderColor: colors.border,
-        }}
-      />
-      <TextInput
-        placeholder="تکرار رمز عبور"
-        placeholderTextColor={colors.textSecondary}
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-        style={{
-          backgroundColor: colors.surface,
-          color: colors.text,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          marginBottom: spacing.sm,
-          borderWidth: 1,
-          borderColor: colors.border,
-        }}
-      />
-
-      {error ? (
-        <Text style={{ color: colors.danger, marginBottom: spacing.md, textAlign: 'center' }}>{error}</Text>
-      ) : null}
-
-      <TouchableOpacity
-        onPress={handleRegister}
-        disabled={loading}
-        style={{
-          backgroundColor: colors.primary,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          alignItems: 'center',
-          marginTop: spacing.sm,
-        }}
-      >
-        <Text style={{ color: '#FFFFFF', ...typography.subtitle }}>
-          {loading ? 'در حال ثبت‌نام...' : 'ثبت‌نام'}
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </Screen>
+    </View>
   );
 }

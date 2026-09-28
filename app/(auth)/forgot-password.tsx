@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../contexts/ThemeContext';
-import { typography, spacing, radius } from '../../constants/theme';
+import { Screen, Field, Btn, Muted } from '../../components/ui';
+import { spacing, typography } from '../../constants/theme';
 
 export default function ForgotPasswordScreen() {
   const { colors } = useTheme();
@@ -11,57 +13,24 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleReset() {
+    if (!email.trim()) return;
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
     setLoading(false);
-    setMessage(error ? 'خطا در ارسال ایمیل' : 'ایمیل بازیابی رمز ارسال شد');
+    setMessage(error ? 'خطا: ' + error.message : 'ایمیل بازیابی رمز ارسال شد');
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, justifyContent: 'center' }}>
-      <Text style={{ ...typography.title, color: colors.text, marginBottom: spacing.md, textAlign: 'center' }}>
-        بازیابی رمز عبور
-      </Text>
-      <Text style={{ ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl, textAlign: 'center' }}>
-        ایمیل خود را وارد کنید تا لینک بازیابی رمز برایتان ارسال شود.
-      </Text>
-
-      <TextInput
-        placeholder="ایمیل"
-        placeholderTextColor={colors.textSecondary}
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={{
-          backgroundColor: colors.surface,
-          color: colors.text,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          marginBottom: spacing.md,
-          borderWidth: 1,
-          borderColor: colors.border,
-        }}
-      />
-
-      {message ? (
-        <Text style={{ color: colors.textSecondary, marginBottom: spacing.md, textAlign: 'center' }}>{message}</Text>
-      ) : null}
-
-      <TouchableOpacity
-        onPress={handleReset}
-        disabled={loading}
-        style={{
-          backgroundColor: colors.primary,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: '#FFFFFF', ...typography.subtitle }}>
-          {loading ? 'در حال ارسال...' : 'ارسال لینک بازیابی'}
-        </Text>
-      </TouchableOpacity>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Screen>
+        <View style={{ height: spacing.xl * 2 }} />
+        <Text style={{ ...typography.title, color: colors.text, textAlign: 'center', marginBottom: spacing.md }}>بازیابی رمز عبور</Text>
+        <Muted style={{ textAlign: 'center', marginBottom: spacing.lg }}>ایمیل خود را وارد کنید تا لینک بازیابی برایتان ارسال شود.</Muted>
+        <Field placeholder="ایمیل" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+        {message ? <Muted style={{ textAlign: 'center', marginBottom: spacing.md }}>{message}</Muted> : null}
+        <Btn label={loading ? 'در حال ارسال...' : 'ارسال لینک بازیابی'} onPress={handleReset} disabled={loading} />
+        <Btn label="بازگشت" variant="ghost" onPress={() => router.back()} />
+      </Screen>
     </View>
   );
 }
