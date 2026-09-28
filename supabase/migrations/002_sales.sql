@@ -1,2 +1,5 @@
--- Migration: 002_sales.sql
-create extension if not exists pgcrypto;
+-- مشتریان و فروش
+create table if not exists public.customers(id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,name text not null,phone text,email text,notes text,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create index if not exists customers_workspace_idx on public.customers(workspace_id);
+create table if not exists public.sales(id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,customer_id uuid references public.customers(id) on delete set null,amount numeric(14,2) not null check(amount>0),description text,created_by uuid references auth.users(id) on delete set null,created_at timestamptz not null default now());
+create index if not exists sales_workspace_created_idx on public.sales(workspace_id,created_at desc);

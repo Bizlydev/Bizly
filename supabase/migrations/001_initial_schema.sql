@@ -1,2 +1,5 @@
--- Migration: 001_initial_schema.sql
+-- ایجاد فضای کاری و عضویت‌ها
 create extension if not exists pgcrypto;
+create table if not exists public.workspaces(id uuid primary key default gen_random_uuid(),name text not null check(length(trim(name))>0),owner_id uuid not null references auth.users(id) on delete cascade,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table if not exists public.workspace_members(id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,user_id uuid not null references auth.users(id) on delete cascade,role text not null default 'employee' check(role in ('owner','manager','employee')),created_at timestamptz not null default now(),unique(workspace_id,user_id));
+create index if not exists workspace_members_user_idx on public.workspace_members(user_id);

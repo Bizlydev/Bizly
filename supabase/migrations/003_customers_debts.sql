@@ -1,2 +1,3 @@
--- Migration: 003_customers_debts.sql
-create extension if not exists pgcrypto;
+-- ثبت و پیگیری بدهی‌ها
+create table if not exists public.debts(id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,customer_id uuid not null references public.customers(id) on delete cascade,direction text not null check(direction in ('receivable','payable')),amount numeric(14,2) not null check(amount>0),paid_amount numeric(14,2) not null default 0 check(paid_amount>=0 and paid_amount<=amount),due_date date,description text,status text not null default 'open' check(status in ('open','partial','paid')),created_at timestamptz not null default now());
+create index if not exists debts_workspace_due_idx on public.debts(workspace_id,due_date);
