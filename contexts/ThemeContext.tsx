@@ -1,50 +1,15 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useMemo, useState, type PropsWithChildren } from 'react';
 import { useColorScheme } from 'react-native';
-import { setAppIcon } from '@mozzius/expo-dynamic-app-icon';
-import { darkColors, lightColors, ThemeColors } from '../constants/theme';
 
-type ThemeMode = 'dark' | 'light';
+export type ThemeMode = 'light' | 'dark' | 'system';
+type ThemeContextValue = { mode: ThemeMode; setMode: (mode: ThemeMode) => void; isDark: boolean };
 
-interface ThemeContextType {
-  mode: ThemeMode;
-  colors: ThemeColors;
-  toggleTheme: () => void;
-  setMode: (mode: ThemeMode) => void;
-}
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const ThemeContext = createContext<ThemeContextType>({
-  mode: 'dark',
-  colors: darkColors,
-  toggleTheme: () => {},
-  setMode: () => {},
-});
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children }: PropsWithChildren) {
   const systemScheme = useColorScheme();
-  const [mode, setMode] = useState<ThemeMode>(systemScheme === 'light' ? 'light' : 'dark');
-
-  const colors = mode === 'dark' ? darkColors : lightColors;
-
-  useEffect(() => {
-    try {
-      // Android uses the default dark icon and switches to the light alias when needed.
-      setAppIcon(mode === 'light' ? 'light' : null);
-    } catch {
-      // Dynamic launcher icons require a native build; Expo Go is not supported.
-    }
-  }, [mode]);
-
-  function toggleTheme() {
-    setMode((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  }
-
-  return (
-    <ThemeContext.Provider value={{ mode, colors, toggleTheme, setMode }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
-
-export function useTheme() {
-  return useContext(ThemeContext);
+  const [mode, setMode] = useState<ThemeMode>('system');
+  const isDark = mode === 'system' ? systemScheme === 'dark' : mode === 'dark';
+  const value = useMemo(() => ({ mode, setMode, isDark }), [mode, isDark]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

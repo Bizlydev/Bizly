@@ -1,81 +1,61 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import type { Profile } from '../types';
+import { createContext, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { normalizeEmail } from '../lib/utils';
 
-interface AuthContextType {
-  session: any;
-  profile: Profile | null;
+type AuthContextValue = {
+  session: Session | null;
+  user: User | null;
   loading: boolean;
-  isPending: boolean;
-  isRejected: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-}
+};
 
-const AuthContext = createContext<AuthContextType>({
-  session: null,
-  profile: null,
-  loading: true,
-  isPending: false,
-  isRejected: false,
-  signOut: async () => {},
-});
+export const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<any>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+export function AuthProvider({ children }: PropsWithChildren) {
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
+    let active = true;
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return () => { active = false; };
+    }
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (active) {
+        if (!error) setSession(data.session);
         setLoading(false);
       }
     });
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        if (session?.user) {
-          loadProfile(session.user.id);
-        } else {
-          setProfile(null);
-          setLoading(false);
-        }
-      }
-    );
-
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (active) setSession(nextSession);
+    });
     return () => {
+      active = false;
       listener.subscription.unsubscribe();
     };
   }, []);
 
-  async function loadProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    setProfile(data);
-    setLoading(false);
-  }
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!isSupabaseConfigured) throw new Error('Supabase is not configured. Set the EXPO_PUBLIC_SUPABASE_URL and publishable key.');
+    const { error } = await supabase.auth.signInWithPassword({ email: normalizeEmail(email), password });
+    if (error) throw error;
+  }, []);
 
-  async function signOut() {
-    await supabase.auth.signOut();
-  }
+  const signUp = useCallback(async (email: string, password: string) => {
+    if (!isSupabaseConfigured) throw new Error('Supabase is not configured. Set the EXPO_PUBLIC_SUPABASE_URL and publishable key.');
+    const { error } = await supabase.auth.signUp({ email: normalizeEmail(email), password });
+    if (error) throw error;
+  }, []);
 
-  const isPending = profile?.status === 'pending' && profile?.role === 'employee';
-  const isRejected = profile?.status === 'rejected';
+  const signOut = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ session, profile, loading, isPending, isRejected, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
+  const value = useMemo(() => ({ session, user: session?.user ?? null, loading, signIn, signUp, signOut }), [session, loading, signIn, signUp, signOut]);
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
