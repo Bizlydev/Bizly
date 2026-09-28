@@ -1,0 +1,1 @@
+import{View,Text}from'react-native';export function SalesSummary(){return <View style={{backgroundColor:'#2457C5',padding:20,borderRadius:18}}><Text style={{color:'#fff'}}>فروش امروز</Text><Text style={{fontSize:30,fontWeight:'800',color:'#fff'}}>—</Text><Text style={{color:'#DCE8FF'}}>پس از اتصال داده‌ها نمایش داده می‌شود.</Text></View>}

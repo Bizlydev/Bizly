@@ -1,0 +1,2 @@
+import { Stack } from 'expo-router'; import { AppTabBar } from '../../components/common/AppTabBar'; import { View } from 'react-native';
+export default function AppLayout(){return <View style={{flex:1}}><Stack screenOptions={{headerShown:false}}/><AppTabBar/></View>}

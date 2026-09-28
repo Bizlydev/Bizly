@@ -1,0 +1,1 @@
+import{View,Text}from'react-native';export function CustomerList(){return <View style={{padding:18,backgroundColor:'#F8FAFC',borderRadius:14}}><Text style={{fontWeight:'700'}}>مشتری‌ای ثبت نشده است</Text><Text style={{marginTop:8,color:'#667085'}}>مشتریان ثبت‌شده در این فهرست قرار می‌گیرند.</Text></View>}

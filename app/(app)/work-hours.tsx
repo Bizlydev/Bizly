@@ -1,0 +1,1 @@
+import{View,Text}from'react-native';import{AppHeader}from'../../components/layout/AppHeader';export default function Screen(){return <View style={{flex:1,padding:20,gap:16}}><AppHeader title="ساعات کاری"/><Text style={{color:'#667085'}}>اطلاعات این بخش پس از اتصال سرویس‌ها نمایش داده می‌شود.</Text></View>}

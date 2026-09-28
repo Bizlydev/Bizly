@@ -1,0 +1,1 @@
+export type Json=string|number|boolean|null|{[key:string]:Json|undefined}|Json[];export type WorkspaceRole='owner'|'manager'|'employee';export type TaskStatus='todo'|'in_progress'|'done';export type DebtDirection='receivable'|'payable';

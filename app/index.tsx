@@ -1,5 +1,2 @@
-import { Redirect } from 'expo-router';
-
-export default function Index() {
-  return <Redirect href="/(auth)/login" />;
-}
+import { Redirect } from 'expo-router'; import { useAuth } from '../hooks/useAuth'; import { AppLoader } from '../components/common/AppLoader';
+export default function Index(){const {session,loading}=useAuth();if(loading)return <AppLoader/>;return <Redirect href={session?'/(app)/dashboard':'/(auth)/login'}/>}
